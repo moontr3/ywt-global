@@ -1,0 +1,82 @@
+{
+    "monday": {
+        "lessons": [
+            "pe",
+            "chemistry",
+            "pe"
+        ]
+    },
+    "tuesday": {
+        "lessons": [
+            "chemistry",
+            "chemistry",
+            "pe"
+        ]
+    },
+    "wednesday": {
+        "lessons": [
+            "chemistry",
+            "pe"
+        ]
+    },
+    "friday": {
+        "lessons": [
+            "chemistry",
+            "chemistry"
+        ],
+        "start_time": [12,0]
+    },
+    "sunday": {
+        "lessons": [
+            "pe",
+            "pe"
+        ],
+        "schedule": [
+            {"break": false, "length": 30},
+            {"break": true,  "length": 10},
+            {"break": false, "length": 30},
+            {"break": true,  "length": 10},
+            {"break": false, "length": 30}
+        ]
+    },
+    "default_schedule": [
+        {"break": false, "length": 40},
+        {"break": true,  "length": 10},
+        {"break": false, "length": 40},
+        {"break": true,  "length": 20},
+        {"break": false, "length": 30},
+        {"break": true,  "length": 10},
+        {"break": false, "length": 40},
+        {"break": true,  "length": 20},
+        {"break": false, "length": 50}
+    ],
+    "default_start_time": [8,0],
+    "lessons": {
+        "pe": {
+            "name": "Physical Education",
+            "short_name": "PE",
+            "homework": false,
+            "teachers": [
+                {
+                    "name": "O. L. Chuchuyav", 
+                    "room": "Street Court"
+                },
+                {
+                    "name": "M. N. Vifiuk", 
+                    "room": "Inside Court"
+                }
+            ]
+        },
+        "chemistry": { 
+            "name": "Chemistry", 
+            "short_name": "Chem",
+            "homework": true,
+            "teachers": [
+                {
+                    "name": "C. F. Atstivak",
+                    "room": "28"
+                }
+            ]
+        }
+    }
+}
