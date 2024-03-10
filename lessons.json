@@ -9,7 +9,7 @@
     "tuesday": {
         "lessons": [
             "chemistry",
-            "chemistry",
+            "math",
             "pe"
         ]
     },
@@ -22,7 +22,7 @@
     "friday": {
         "lessons": [
             "chemistry",
-            "chemistry"
+            "math"
         ],
         "start_time": [12,0]
     },
@@ -75,6 +75,17 @@
                 {
                     "name": "C. F. Atstivak",
                     "room": "28"
+                }
+            ]
+        },
+        "math": { 
+            "name": "Math", 
+            "short_name": "Math",
+            "homework": true,
+            "teachers": [
+                {
+                    "name": "M. N. Vifiuk",
+                    "room": "2"
                 }
             ]
         }

@@ -58,6 +58,27 @@ def shorten_time(seconds:int) -> str:
         return f'{int(seconds/60)} мин.'
     else:
         return f'{int(seconds)} сек.'
+    
+def shorten_string(string:str, max_chars:int=50, remove_newlines:bool=True) -> str:
+    '''
+    Strips the string.
+    '''
+    dots = False
+    
+    if len(string) > max_chars:
+        dots = True
+        string = string[:max_chars]
+    
+    if remove_newlines and '\n' in string:
+        dots = True
+        string = string.split('\n')[0]
+
+    return string+('...' if dots else '')
+
+    
+def shorten_date(date:datetime.datetime) -> str:
+    wd = weekday(date.weekday(), short=True)
+    return f'{wd}, {date.day}'
 
 def weekday(index, short=False, form=False) -> str:
     '''
@@ -91,7 +112,7 @@ def rand_id(k:int=4) -> str:
     timestamp = str(int(time.time())) # unique timestamp that changes every second and never repeats after
     random_part = "".join(random.choices('0123456789', k=k)) # randomly generated string to add
                                                              # after the timestamp
-    string = hex(timestamp+random_part)[2:] # converting the number to hex to make it shorter
+    string = hex(int(timestamp+random_part))[2:] # converting the number to hex to make it shorter
     return string
 
 def to_td(target_time: datetime.datetime) -> int:

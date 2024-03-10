@@ -18,5 +18,8 @@ GREETING_PHRASES = [
 ] # a list of phrases to choose from when displaying the /help command.
 
 USE_WHITELIST = False # if True changes the blacklist to become a whitelist
+USE_WRITE_WHITELIST = False # if True changes the write blacklist to become a whitelist
 ADMINS = [1365781815] # list of telegram user IDs that are admins in this bot
                       # the default one is me remove this please
+
+IMAGE_WATERMARK_TEXT = 'https://github.com/moontr3/ywt-global' # watermark to put on uploaded attachments

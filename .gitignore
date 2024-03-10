@@ -1,4 +1,7 @@
 __pycache__
 log.txt
 data.json
+data.json.bak
 .env
+temp
+attachments

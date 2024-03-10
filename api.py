@@ -14,7 +14,7 @@ from aiogram.types import User as AiogramUser
 class HomeworkEntry:
     def __init__(self,
         id:str, lesson:str, text:str,
-        attachments:List[str],
+        attachment:str,
         written_at:float, written_by:int
     ):
         '''
@@ -23,7 +23,7 @@ class HomeworkEntry:
         self.id: str = id # homework ID
         self.lesson: str = lesson # lesson ID
         self.text: str = text # homework text
-        self.attachments: List[str] = attachments # list of attachment IDs
+        self.attachment: str = attachment # attachment ID
         self.written_at: float = written_at # timestamp when written
         self.written_by: int = written_by # user ID who wrote it
 
@@ -34,7 +34,7 @@ class HomeworkEntry:
         return {
             "lesson": self.lesson,
             "text": self.text,
-            "attachments": self.attachments,
+            "attachment": self.attachment,
             "written_at": self.written_at,
             "written_by": self.written_by
         }
@@ -206,6 +206,9 @@ class Time:
                 self.is_school = False
 
 
+# user permissions
+
+
 # main manager
 
 class Manager:
@@ -215,6 +218,8 @@ class Manager:
         '''
         self.lessons_file = lessons_file # path to file with lesson data
         self.db_file = db_file # path to database file
+
+        self.states: Dict[int, str] = {} # list of user states
 
         self.reload_lessons()
         self.reload_db()
@@ -242,7 +247,8 @@ class Manager:
             "attachments": {
                 i: self.attachments[i].to_dict() for i in self.attachments
             },
-            "blacklist": self.blacklist
+            "blacklist": self.blacklist,
+            "write_blacklist": self.write_blacklist
         }
         with open(self.db_file, 'w', encoding='utf8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
@@ -255,6 +261,7 @@ class Manager:
         self.homework: Dict[str, HomeworkEntry] = {}
         self.attachments: Dict[str, Attachment] = {}
         self.blacklist: List[int] = []
+        self.write_blacklist: List[int] = []
 
         self.commit_db()
 
@@ -335,18 +342,19 @@ class Manager:
         # loading data
         homework = raw_db.get('homework', {})
         self.homework: Dict[str, HomeworkEntry] =\
-            {i: HomeworkEntry(homework[i]) for i in homework}
+            {i: HomeworkEntry(id=i, **homework[i]) for i in homework}
         
         attachments = raw_db.get('attachments', {})
         self.attachments: Dict[str, Attachment] =\
-            {i: Attachment(attachments[i]) for i in attachments}
+            {i: Attachment(id=i, **attachments[i]) for i in attachments}
         
         self.blacklist: List[int] = raw_db.get('blacklist', [])
+        self.write_blacklist : List[int] = raw_db.get('write_blacklist', [])
 
         self.commit_db()
         
 
-    def check(self, user:AiogramUser) -> str:
+    def check(self, user:AiogramUser, write_action:bool=False) -> str:
         '''
         Checks if the user is allowed to use the bot and performs
         some manipulations with user if needed.
@@ -356,6 +364,8 @@ class Manager:
         '''
         if user.id in config.ADMINS: return None # все равны но админы ровнее
 
+        # resetting user state
+
         # blacklist
         if not config.USE_WHITELIST and user.id in self.blacklist:
             return 'Пользователь в черном списке'
@@ -363,6 +373,14 @@ class Manager:
         # whitelist
         if config.USE_WHITELIST and user.id not in self.blacklist:
             return 'Пользователь не в белом списке'
+        
+        # write blacklist
+        if not config.USE_WRITE_WHITELIST and user.id in self.write_blacklist:
+            return 'Нет прав для записи - Пользователь в чёрном списке'
+        
+        # write blacklist
+        if config.USE_WRITE_WHITELIST and user.id not in self.write_blacklist:
+            return 'Нет прав для записи - Пользователь не в белом списке'
         
 
     def add_to_blacklist(self, id:int) -> bool:
@@ -385,6 +403,46 @@ class Manager:
         if id not in self.blacklist: return False
         self.blacklist.remove(id)
         return True
+    
+
+    def write_availability(self, id:int) -> bool:
+        '''
+        Returns whether the user with the given ID can
+        write to the DB (like writing homework etc.).
+        '''
+        if not config.USE_WRITE_WHITELIST and id in self.write_blacklist\
+            or config.USE_WRITE_WHITELIST and id not in self.write_blacklist:
+                return False
+        
+        return True
+    
+
+    def get_state(self, id:int) -> str:
+        '''
+        Returns the state of the user with the given ID.
+
+        If no state, returns None.
+        '''
+        return self.states.get(id, None)
+    
+
+    def set_state(self, id:int, state:str=None):
+        '''
+        Sets the state of the user.
+        '''
+        if state == None:
+            self.reset_state(id)
+            return
+        
+        self.states[id] = state
+
+
+    def reset_state(self, id:int):
+        '''
+        Removes the state of the user.
+        '''
+        if id in self.states:
+            self.states.pop(id)
     
 
     def get_schedule(self, weekday_index:int) -> Day:
@@ -461,7 +519,7 @@ class Manager:
 
     def add_homework(self,
         lesson:str, text:str,
-        attachments:List[str],
+        attachment:str,
         written_by:int
     ) -> str:
         '''
@@ -469,11 +527,51 @@ class Manager:
         '''
         id = utils.rand_id()
         self.homework[id] = HomeworkEntry(
-            id, lesson, text, attachments,
+            id, lesson, text, attachment,
             time.time(), written_by
         )
         self.commit_db()
         return id
+    
+
+    def add_attachment(self,
+        id:str, filename:str, lesson:str,
+        comment:str, written_at:int,
+        written_by:int
+    ):
+        '''
+        Adds an attachment.
+        '''
+        self.attachments[id] = Attachment(
+            id, filename, lesson, comment,
+            written_at, written_by
+        )
+        self.commit_db()
+
+
+    def delete_attachment(self, id:str):
+        '''
+        Deletes an attachment.
+        '''
+        if id not in self.attachments:
+            return
+        
+        self.attachments.pop(id)
+        self.commit_db()
+    
+
+    def get_homework_dict(self) -> Dict[str, List[HomeworkEntry]]:
+        '''
+        Returns a dict with lesson **names** as keys and lists of
+        homework objects as values.
+        '''
+        data = {}
+        for i in self.lessons.items():
+            hw = self.get_homework(i[0])
+            if hw:
+                data[i[1].name] = hw
+
+        return data
 
 
     def get_homework(self, lesson:str) -> List[HomeworkEntry]:
