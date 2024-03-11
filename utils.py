@@ -8,13 +8,22 @@ import api
 
 # functions
 
-def hw_to_string(hw:api.HomeworkEntry, date:bool=True) -> str:
+def hw_to_string(hw:api.HomeworkEntry, date:bool=True, user:str=None) -> str:
     '''
     Converts a `HomeworkEntry` object into a neat string.
     '''
     written_at = datetime.datetime.fromtimestamp(hw.written_at)
     photo_icon = '🖼' if hw.attachment != None else ''
-    return f'•  {photo_icon} {hw.text}{f" <i>({shorten_date(written_at)})</i>" if date else ""}'
+    text = ''
+
+    if user and date:
+        text = f" <i>(в {shorten_date(written_at)} от {user})</i>"
+    elif user:
+        text = f" <i>(от {user})</i>"
+    elif date:
+        text = f" <i>({shorten_date(written_at)})</i>"
+
+    return f'•  {photo_icon} {hw.text}{text}'
 
 def datetime_to_week(
     date:datetime.datetime, weekday:int=None,

@@ -122,7 +122,7 @@ def get_homework_text(hw: Dict[str, List[api.HomeworkEntry]]):
         for k, i in hw.items():
             out += f'<b>{k}:</b>\n'
             for x in i:
-                out += utils.hw_to_string(x)+'\n'
+                out += utils.hw_to_string(x, user=mg.get_user(x.written_by).name)+'\n'
             out += '\n'
 
     return out
@@ -638,7 +638,7 @@ async def inline_erase_hw_entry(call: types.CallbackQuery):
     out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
     out += 'Список удалённого ДЗ:\n\n'
     for i in hw:
-        out += utils.hw_to_string(i)+'\n'
+        out += utils.hw_to_string(i, False, mg.get_user(i.written_by).name)+'\n'
         mg.delete_homework(i.id)
 
     # creating keyboard
@@ -747,7 +747,7 @@ async def inline_subject(call: types.CallbackQuery):
             out += '<i>Ничего не записано</i>\n'
 
         for i in hw:
-            out += utils.hw_to_string(i)+'\n'
+            out += utils.hw_to_string(i, user=mg.get_user(i.written_by).name)+'\n'
 
     # sending
     await call.message.answer(out)

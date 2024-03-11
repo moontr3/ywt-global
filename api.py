@@ -206,7 +206,37 @@ class Time:
                 self.is_school = False
 
 
-# user permissions
+# user
+
+class User:
+    def __init__(self, user:AiogramUser):
+        '''
+        A user entry in a database
+        '''
+        self.id: int = user.id # telegram user id
+        self.name: str = user.username if user.username else user.full_name # user name to display
+        self.full_name: str = user.full_name # telegram account name and surname
+        self.handle: str = user.username # telegram username, can be none
+        
+    def update_name(self, user:AiogramUser):
+        '''
+        Updates the name and the handle of the user.
+        '''
+        changed = False
+
+        if self.full_name != user.full_name:
+            log(f'User {self.id} changed full name from {self.full_name} to {user.full_name}')
+            self.full_name = user.full_name
+            changed = True
+
+        if self.handle != user.username:
+            log(f'User {self.id} changed handle from {self.handle} to {user.username}')
+            self.handle = user.username
+            changed = True
+
+        if changed:
+            self.name = user.username if user.username else user.full_name
+        
 
 
 # main manager
@@ -241,6 +271,9 @@ class Manager:
         Pushes all data to the database file.
         '''
         data = {
+            "users": {
+                i: self.users[i].to_dict() for i in self.users
+            },
             "homework": {
                 i: self.homework[i].to_dict() for i in self.homework
             },
@@ -262,6 +295,7 @@ class Manager:
         self.attachments: Dict[str, Attachment] = {}
         self.blacklist: List[int] = []
         self.write_blacklist: List[int] = []
+        self.users: Dict[int, User] = {}
 
         self.commit_db()
 
@@ -349,7 +383,11 @@ class Manager:
             {i: Attachment(id=i, **attachments[i]) for i in attachments}
         
         self.blacklist: List[int] = raw_db.get('blacklist', [])
-        self.write_blacklist : List[int] = raw_db.get('write_blacklist', [])
+        self.write_blacklist: List[int] = raw_db.get('write_blacklist', [])
+
+        users = raw_db.get('users', {})
+        self.users: Dict[int, User] =\
+            {int(i): User(id=i, **users[i]) for i in users}
 
         self.commit_db()
         
@@ -365,6 +403,10 @@ class Manager:
         # resetting user state
         self.reset_state(user.id)
 
+        # checking user
+        if user.id not in self.users:
+            self.new_user(user)
+
         # checking permissions
         if user.id in config.ADMINS: return None # все равны но админы ровнее
 
@@ -376,13 +418,14 @@ class Manager:
         if config.USE_WHITELIST and user.id not in self.blacklist:
             return 'Пользователь не в белом списке'
         
-        # write blacklist
-        if not config.USE_WRITE_WHITELIST and user.id in self.write_blacklist:
-            return 'Нет прав для записи - Пользователь в чёрном списке'
-        
-        # write blacklist
-        if config.USE_WRITE_WHITELIST and user.id not in self.write_blacklist:
-            return 'Нет прав для записи - Пользователь не в белом списке'
+        if write_action:
+            # write blacklist
+            if not config.USE_WRITE_WHITELIST and user.id in self.write_blacklist:
+                return 'Нет прав для записи - Пользователь в чёрном списке'
+            
+            # write blacklist
+            if config.USE_WRITE_WHITELIST and user.id not in self.write_blacklist:
+                return 'Нет прав для записи - Пользователь не в белом списке'
         
 
     def add_to_blacklist(self, id:int) -> bool:
@@ -447,6 +490,28 @@ class Manager:
         '''
         if id in self.states:
             self.states.pop(id)
+
+
+    def new_user(self, user:AiogramUser):
+        '''
+        Creates a new user.
+        '''
+        if user.id in self.users:
+            return
+        
+        self.users[user.id] = User(user)
+        self.commit_db()
+
+
+    def get_user(self, id:int) -> User:
+        '''
+        Returns a user if found in the database.
+        Otherwise returns None.
+        '''
+        if id not in self.users:
+            return None
+        
+        return self.users[id]
     
 
     def get_schedule(self, weekday_index:int) -> Day:
