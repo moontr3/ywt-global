@@ -362,9 +362,11 @@ class Manager:
         Will return `str` with the error if something goes wrong,
         otherwise will return None.
         '''
-        if user.id in config.ADMINS: return None # все равны но админы ровнее
-
         # resetting user state
+        self.reset_state(user.id)
+
+        # checking permissions
+        if user.id in config.ADMINS: return None # все равны но админы ровнее
 
         # blacklist
         if not config.USE_WHITELIST and user.id in self.blacklist:
@@ -410,6 +412,8 @@ class Manager:
         Returns whether the user with the given ID can
         write to the DB (like writing homework etc.).
         '''
+        if id in config.ADMINS: return True
+
         if not config.USE_WRITE_WHITELIST and id in self.write_blacklist\
             or config.USE_WRITE_WHITELIST and id not in self.write_blacklist:
                 return False
@@ -534,6 +538,22 @@ class Manager:
         return id
     
 
+    def delete_homework(self, id:str):
+        '''
+        Deletes a homework entry.
+        '''
+        if id not in self.homework:
+            return
+        
+        attachment = self.homework[id].attachment
+        self.homework.pop(id)
+
+        if attachment:
+            self.delete_attachment(attachment)
+
+        self.commit_db()
+    
+
     def add_attachment(self,
         id:str, filename:str, lesson:str,
         comment:str, written_at:int,
@@ -556,6 +576,9 @@ class Manager:
         if id not in self.attachments:
             return
         
+        attachment = self.attachments[id]
+        if os.path.exists(attachment.filename):
+            os.remove(attachment.filename)
         self.attachments.pop(id)
         self.commit_db()
     

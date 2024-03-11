@@ -3,9 +3,18 @@ from typing import *
 import datetime
 import time
 import random
+import api
 
 
 # functions
+
+def hw_to_string(hw:api.HomeworkEntry, date:bool=True) -> str:
+    '''
+    Converts a `HomeworkEntry` object into a neat string.
+    '''
+    written_at = datetime.datetime.fromtimestamp(hw.written_at)
+    photo_icon = '🖼' if hw.attachment != None else ''
+    return f'•  {photo_icon} {hw.text}{f" <i>({shorten_date(written_at)})</i>" if date else ""}'
 
 def datetime_to_week(
     date:datetime.datetime, weekday:int=None,

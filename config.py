@@ -23,3 +23,11 @@ ADMINS = [1365781815] # list of telegram user IDs that are admins in this bot
                       # the default one is me remove this please
 
 IMAGE_WATERMARK_TEXT = 'https://github.com/moontr3/ywt-global' # watermark to put on uploaded attachments
+
+HELP_TEXT = '''\
+<b>/help</b> - список команд
+<b>/summary</b> - посмотреть краткое расписание и ДЗ
+<b>/homework</b> - посмотреть или изменить записанное ДЗ
+<b>/subject</b> - посмотреть информацию о предмете
+<b>/schedule</b> - посмотреть расписание уроков на любой день
+'''

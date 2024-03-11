@@ -32,7 +32,10 @@ mg = api.Manager(
 )
 
 
+
+# ---------------------------
 # functions
+# ---------------------------
 
 def get_schedule_weekday_text(day:api.Day) -> str:
     '''
@@ -72,12 +75,15 @@ def get_summary_text(day:api.Day, timedata:api.Time) -> str:
             symbol = '▸' if index == timedata.event_index else ' '
 
         # text
-        out += f'<code>{symbol}</code> '+\
+        out += f'<code>{symbol}</code>'+\
             f'{i.start_time.hour}:{i.start_time.minute:0>2}-'\
             f'{i.end_time.hour}:{i.end_time.minute:0>2}  •  '\
             f'<b>{mg.lessons[i.name].name}</b> '\
             f'<i>({", ".join(l.room for l in mg.lessons[i.name].teachers)})</i>\n'
-        # todo homework here!!
+        
+        hw = mg.get_homework(i.name)
+        for x in hw:
+            out += '<code>  </code>'+utils.hw_to_string(x, False)+'\n'
 
     return out
 
@@ -116,9 +122,7 @@ def get_homework_text(hw: Dict[str, List[api.HomeworkEntry]]):
         for k, i in hw.items():
             out += f'<b>{k}:</b>\n'
             for x in i:
-                written_at = datetime.datetime.fromtimestamp(x.written_at)
-                photo_icon = '🖼' if x.attachment != None else ''
-                out += f'•  {photo_icon} {x.text} <i>({utils.shorten_date(written_at)})</i>\n'
+                out += utils.hw_to_string(x)+'\n'
             out += '\n'
 
     return out
@@ -147,11 +151,8 @@ def add_overlay(attachment:api.Attachment) -> str:
     # comment
     text = utils.shorten_string(attachment.comment)
     draw.text((10, image.size[1]-10), text, (255,255,255), bold_font, 'ld')
-    # author
-    # todo put a user here
-    string = f'От {utils.shorten_string(str(attachment.written_by), 25)}'\
-        f' в {utils.shorten_date(written_at)}'
-    draw.text((10, image.size[1]-30), string, (255,255,255), font, 'ld')
+    # lesson name
+    draw.text((10, image.size[1]-30), lesson.name, (255,255,255), font, 'ld')
 
     # watermark
     draw.text(
@@ -159,11 +160,14 @@ def add_overlay(attachment:api.Attachment) -> str:
         config.IMAGE_WATERMARK_TEXT, (255,255,255),
         font, 'rd'
     )
-    # lesson name
+    # author
+    # todo put a user here
+    string = f'От {utils.shorten_string(str(attachment.written_by), 25)}'\
+        f' в {utils.shorten_date(written_at)}'
     draw.text(
         (image.size[0]-10, image.size[1]-30),
-        lesson.name, (255,255,255),
-        bold_font, 'rd'
+        string, (255,255,255),
+        font, 'rd'
     )
 
     # saving the image
@@ -210,7 +214,13 @@ async def download_image(
 
     return id
 
+
+
+
+
+# ---------------------------
 # commands
+# ---------------------------
 
 @dp.message(Command(commands=['start', 'help']))
 async def cmd_start(msg: types.Message):
@@ -227,7 +237,8 @@ async def cmd_start(msg: types.Message):
 
     # composing message
     phrase = random.choice(config.GREETING_PHRASES)
-    out = f'🎉 <b>{phrase}</b>'
+    out = f'🎉 <b>{phrase}</b>\n\n'
+    out += config.HELP_TEXT
 
     # sending
     await msg.reply(out)
@@ -248,6 +259,7 @@ async def cmd_summary(msg: types.Message):
 
     log(f'{msg.from_user.full_name} ({msg.from_user.id}) requested summary')
     weekday, weekday_index = mg.get_summary()
+    weekday: api.Day
     cur_time = api.Time(weekday, weekday_index)
 
     if cur_time.is_school:
@@ -269,9 +281,19 @@ async def cmd_summary(msg: types.Message):
     out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
     out += f'📜 Расписание на <b>{utils.weekday(weekday_index, form=True).lower()}</b>:\n\n'
     out += get_summary_text(weekday, cur_time)
+    
+    # images
+    kb = InlineKeyboardBuilder()
+
+    for i in mg.attachments.values():
+        if i.lesson not in weekday.lessons: continue
+        kb.row(types.InlineKeyboardButton(
+            text=f"📷 {i.comment}",
+            callback_data=f'image_{i.id}'
+        ))
 
     # sending
-    await msg.reply(out)
+    await msg.reply(out, reply_markup=kb.as_markup())
 
 
 
@@ -324,10 +346,10 @@ async def cmd_subject(msg: types.Message):
         )
         if index >= 2:
             index = 0
-            kb.add(btn)
+            kb.row(btn)
         else:
             index += 1
-            kb.row(btn)
+            kb.add(btn)
 
     # sending
     out = f'📪 Выберите предмет'
@@ -376,6 +398,41 @@ async def cmd_homework(msg: types.Message):
 # callbacks
 # ---------------------------
 
+@dp.callback_query(F.data == 'homework')
+async def inline_editor(call: types.CallbackQuery):
+    '''
+    Shows the homework for all lessons
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) requested homework list (inline)')
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    if mg.write_availability(call.from_user.id):
+        kb.add(types.InlineKeyboardButton(text="✏ Изменить", callback_data=f'hweditor'))
+
+    # images
+    for i in mg.attachments.values():
+        lesson = mg.lessons[i.lesson]
+        kb.row(types.InlineKeyboardButton(
+            text=f"📷 {lesson.short_name}: {i.comment}",
+            callback_data=f'image_{i.id}'
+        ))
+
+    # composing message
+    data = mg.get_homework_dict()
+    out = get_homework_text(data)
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
 @dp.callback_query(F.data == 'hweditor')
 async def inline_editor(call: types.CallbackQuery):
     '''
@@ -391,16 +448,18 @@ async def inline_editor(call: types.CallbackQuery):
 
     # creating keyboard
     kb = InlineKeyboardBuilder()
-    index = 0
+    kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data='homework'))
+    index = 3
     for i in mg.lessons.values():
+        if not i.homework: continue
+
+        button = types.InlineKeyboardButton(text=i.short_name, callback_data=f'hweditor_{i.id}')
         if index >= 3:
-            f = kb.row
+            kb.row(button)
             index = 0
         else:
-            f = kb.add
+            kb.add(button)
             index += 1
-
-        f(types.InlineKeyboardButton(text=i.short_name, callback_data=f'hweditor_{i.id}'))
 
     # sending
     out = f'<b>📕 Выберите урок для изменения домашнего задания</b>'
@@ -439,7 +498,6 @@ async def inline_editor_lesson(call: types.CallbackQuery):
     kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'hweditor'))
     kb.row(types.InlineKeyboardButton(text='➕ Добавить', callback_data=f'hwadd_{lesson.id}'))
     kb.add(types.InlineKeyboardButton(text='🗑 Удалить', callback_data=f'hwdel_{lesson.id}'))
-    kb.add(types.InlineKeyboardButton(text='✏ Изменить', callback_data=f'hwedit_{lesson.id}'))
 
     # images
     for i in mg.attachments.values():
@@ -468,6 +526,11 @@ async def inline_add_hw(call: types.CallbackQuery):
     lesson = mg.lessons[call.data.removeprefix('hwadd_')]
     log(f'{call.from_user.full_name} ({call.from_user.id}) adding homework to {lesson.id}')
 
+    # checking availability
+    if not lesson.homework:
+        await call.answer('❌ Возможность записывать ДЗ на этот урок отключена', True)
+        return
+
     mg.set_state(call.from_user.id, f'hwadd_{lesson.id}')
 
     # composing message
@@ -478,6 +541,110 @@ async def inline_add_hw(call: types.CallbackQuery):
     kb = InlineKeyboardBuilder()
     kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'hweditor_{lesson.id}'))
 
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+    
+
+@dp.callback_query(F.data.startswith('hwdel_'))
+async def inline_del_hw(call: types.CallbackQuery):
+    '''
+    Delete homework chooser modal
+    '''
+    # preparing
+    check = mg.check(call.from_user)
+    if check:
+        await call.answer(f"❌ {check}", True)
+        return
+
+    # checking availability
+    lesson = mg.lessons[call.data.removeprefix('hwdel_')]
+    if not mg.get_homework(lesson.id):
+        await call.answer('❌ Ничего не записано', True)
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) deleting homework from {lesson.id}')
+
+    # composing message
+    out = f'📝 Выберите домашнее задание, которое нужно удалить с урока <b>{lesson.name}</b>\n\n'\
+        '<i>Прикрепленные к ДЗ изображения также будут удалены.</i>'
+    
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'hweditor_{lesson.id}'))
+    kb.add(types.InlineKeyboardButton(text='🗑 Удалить всё', callback_data=f'hwerase_{lesson.id}'))
+    
+    for i in mg.get_homework(lesson.id):
+        photo_icon = '🖼 ' if i.attachment != None else ''
+        kb.row(types.InlineKeyboardButton(text=f'{photo_icon}{i.text}', callback_data=f'hwrem_{i.id}'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+    
+
+@dp.callback_query(F.data.startswith('hwrem_'))
+async def inline_rem_hw_entry(call: types.CallbackQuery):
+    '''
+    Delete homework entry callback
+    '''
+    # preparing
+    check = mg.check(call.from_user)
+    if check:
+        await call.answer(f"❌ {check}", True)
+        return
+
+    # checking availability
+    id = call.data.removeprefix('hwrem_')
+    if id not in mg.homework:
+        await call.answer('❌ Выбранное ДЗ не найдено', True)
+        return
+
+    hw = mg.homework[id]
+    lesson = mg.lessons[hw.lesson]
+    log(f'{call.from_user.full_name} ({call.from_user.id}) deleting homework entry {hw.id} from {hw.lesson}')
+
+    mg.delete_homework(hw.id)
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'hwdel_{hw.lesson}'))
+
+    # sending
+    out = f'🗑 Домашнее задание <b>{hw.text}</b> успешно удалено с урока <b>{lesson.name}</b>!'
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+    
+
+@dp.callback_query(F.data.startswith('hwerase_'))
+async def inline_erase_hw_entry(call: types.CallbackQuery):
+    '''
+    Erase all homework entries for one lesson callback
+    '''
+    # preparing
+    check = mg.check(call.from_user)
+    if check:
+        await call.answer(f"❌ {check}", True)
+        return
+
+    # checking availability
+    lesson = mg.lessons[call.data.removeprefix('hwerase_')]
+    hw = mg.get_homework(lesson.id)
+    log(f'{call.from_user.full_name} ({call.from_user.id}) deleting all homework from {lesson.id}')
+
+    # composing message
+    out = f'🗑 Всё ДЗ было успешно удалено с урока <b>{lesson.name}</b>!\n'
+    out += f'<code>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _</code>\n'
+    out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
+    out += 'Список удалённого ДЗ:\n\n'
+    for i in hw:
+        out += utils.hw_to_string(i)+'\n'
+        mg.delete_homework(i.id)
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'hweditor_{lesson.id}'))
+    
     # sending
     await call.message.edit_text(out, reply_markup=kb.as_markup())
     await call.answer()
@@ -571,7 +738,16 @@ async def inline_subject(call: types.CallbackQuery):
         out += f'•  <b>{i.name}</b> <i>({i.room})</i>\n'
     out += '\n' 
 
-    # todo: homework here !!
+    # homework
+    if data.homework:
+        out += '📖 Домашнее задание:\n'
+        hw = mg.get_homework(data.id)
+        
+        if not hw:
+            out += '<i>Ничего не записано</i>\n'
+
+        for i in hw:
+            out += utils.hw_to_string(i)+'\n'
 
     # sending
     await call.message.answer(out)
@@ -585,13 +761,19 @@ async def inline_attachment(call: types.CallbackQuery):
     Attachment view callback
     '''
     # preparing
+    id = call.data.removeprefix('image_')
     check = mg.check(call.from_user)
     if check:
         await call.answer(f"❌ {check}")
         return
 
-    image = mg.attachments[call.data.removeprefix('image_')]
-    log(f'{call.from_user.full_name} ({call.from_user.id}) requested image with ID {image.id}')
+    log(f'{call.from_user.full_name} ({call.from_user.id}) requested image with ID {id}')
+
+    # checking for the image
+    if id not in mg.attachments:
+        await call.answer('❌ Изображение не найдено', True)
+        return
+    image = mg.attachments[id]
 
     # sending
     filename = add_overlay(image)
@@ -601,7 +783,11 @@ async def inline_attachment(call: types.CallbackQuery):
     out = f'🖼 Прикреплённое изображение к ДЗ по уроку <b>{lesson.name}</b>:\n\n'
     out += image.comment
 
-    await call.message.answer_photo(file, out)
+    # keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text='❌ Отмена', callback_data='delete'))
+
+    await call.message.answer_photo(file, out, )
     await call.answer()
 
     os.remove(filename)
@@ -612,6 +798,15 @@ async def noop_callback(call: types.CallbackQuery):
     '''
     Does literally nothing
     '''
+    await call.answer()
+
+
+@dp.callback_query(F.data == 'delete')
+async def delete_callback(call: types.CallbackQuery):
+    '''
+    Deletes a message
+    '''
+    await call.message.delete()
     await call.answer()
 
 
@@ -641,6 +836,13 @@ async def state_handler(msg: types.Message):
         if check:
             await msg.reply(f"❌ {check}")
             return
+        lesson = mg.lessons[state.removeprefix('hwadd_')]
+        
+        # checking for availability
+        if not lesson.homework:
+            await msg.reply("<b>❌ Операция отменена</b>\n\nВозможность записывать"\
+                            " ДЗ на этот урок отключена.")
+            return
         
         # checking for caption
         if msg.photo and msg.caption == None:
@@ -649,7 +851,6 @@ async def state_handler(msg: types.Message):
             return
         
         # adding hw
-        lesson = mg.lessons[state.removeprefix('hwadd_')]
         text = msg.text if not msg.photo else msg.caption
         attachment = None
 
