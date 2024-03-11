@@ -11,7 +11,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-import json
+import time
 import utils
 import api
 import random
@@ -36,6 +36,23 @@ mg = api.Manager(
 # ---------------------------
 # functions
 # ---------------------------
+
+def get_stats_text(user:api.User) -> str:
+    '''
+    Creates a eco stats message
+    '''
+    out = f'👋 Привет, <b>{user.name}</b>!\n'   
+    out += f'<code>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _</code>\n'
+    out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
+    
+    out += f'💳 Ваш баланс: <b>{user.balance}{config.CURRENCY}</b>\n'
+    if time.time() >= user.daily_until:
+        out += f'🎁 Ежедневная награда уже доступна!'
+    else:
+        out += f'🎁 Ежедневная награда через: <b>{utils.shorten_time(user.daily_until-time.time())}</b>'
+
+    return out
+    
 
 def get_schedule_weekday_text(day:api.Day) -> str:
     '''
@@ -214,8 +231,7 @@ async def download_image(
         return None
 
     # adding attachment
-    written_at = datetime.datetime.now()
-    mg.add_attachment(id, filepath, lesson.id, comment, written_at.timestamp(), written_by.id)
+    mg.add_attachment(id, filepath, lesson.id, comment, time.time(), written_by.id)
 
     return id
 
@@ -395,6 +411,127 @@ async def cmd_homework(msg: types.Message):
     # sending
     await msg.reply(out, reply_markup=kb.as_markup())
 
+
+
+
+
+# ---------------------------
+# admin shit
+# ---------------------------
+
+@dp.message(Command('reload'))
+async def cmd_reload(msg: types.Message):
+    '''
+    Shows the basic user stats
+    '''
+    # preparing
+    if msg.from_user.id not in config.ADMINS:
+        return
+
+    log(f'{msg.from_user.full_name} ({msg.from_user.id}) requested reload')
+
+    mg.reload_db()
+
+    # sending
+    out = f'✅ Success!'
+    await msg.reply(out)
+
+
+
+
+
+# ---------------------------
+# economy command
+# ---------------------------
+
+@dp.message(Command('eco'))
+async def cmd_eco(msg: types.Message):
+    '''
+    Shows the basic user stats
+    '''
+    # preparing
+    check = mg.check(msg.from_user)
+    if check:
+        await msg.reply(f"❌ {check}")
+        return
+
+    log(f'{msg.from_user.full_name} ({msg.from_user.id}) requested eco')
+
+    # composing message
+    user = mg.get_user(msg.from_user.id)
+    out = get_stats_text(user)
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.row(types.InlineKeyboardButton(text="🚽 Плот", callback_data=f'plot'))
+    kb.row(types.InlineKeyboardButton(text="🎁 Ежедневная награда", callback_data=f'daily'))
+
+    # sending
+    await msg.reply(out, reply_markup=kb.as_markup())
+
+
+
+@dp.callback_query(F.data == 'eco')
+async def inline_eco(call: types.CallbackQuery):
+    '''
+    Shows the basic user stats (inline)
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) requested eco (inline)')
+
+    # composing message
+    user = mg.get_user(call.from_user.id)
+    out = get_stats_text(user)
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.row(types.InlineKeyboardButton(text="🚽 Плот", callback_data=f'plot'))
+    kb.row(types.InlineKeyboardButton(text="🎁 Ежедневная награда", callback_data=f'daily'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
+
+
+@dp.callback_query(F.data == 'daily')
+async def inline_daily(call: types.CallbackQuery):
+    '''
+    Collects daily reward
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) collecting daily reward')
+    user = mg.get_user(call.from_user.id)
+
+    # composing message
+    reward = mg.collect_daily(user.id)
+
+    if reward == None:
+        await call.answer('❌ Приходите за наградой через '\
+                         f'{utils.shorten_time(user.daily_until-time.time())}!', True)
+        return
+    
+    out = f'🎁 Вы получили <b>{reward}{config.CURRENCY}</b>!\n\n'\
+        f'Приходите через <b>{utils.shorten_time(config.DAILY_REWARD_TIMEOUT)}</b> за новой наградой!'
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text="⬅ Назад", callback_data=f'eco'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
 
 
 

@@ -7,6 +7,7 @@ from log import *
 import utils
 import time
 from aiogram.types import User as AiogramUser
+import random
 
 
 # homework entry
@@ -209,19 +210,28 @@ class Time:
 # user
 
 class User:
-    def __init__(self, id:int, full_name:str, handle:str):
+    def __init__(
+        self, id:int, full_name:str, handle:str,
+        balance:int=config.DEFAULT_BALANCE,
+        daily_until:int=0
+    ):
         '''
         A user entry in a database
         '''
-        self.id: int = id # telegram user id
+        self.id: int = int(id) # telegram user id
         self.name: str = handle if handle else full_name # user name to display
         self.full_name: str = full_name # telegram account name and surname
         self.handle: str = handle # telegram username, can be none
 
+        self.balance: int = balance # current user's economy balance
+        self.daily_until: int = daily_until # timestamp after which the daily reward may be collected
+
     def to_dict(self) -> dict:
         return {
             "full_name": self.full_name,
-            "handle": self.handle
+            "handle": self.handle,
+            "balance": self.balance,
+            "daily_until": self.daily_until
         }
         
     def update_name(self, user:AiogramUser):
@@ -689,3 +699,44 @@ class Manager:
         Returns all lessons with the ability to write homework.
         '''
         return [i for i in self.lessons.values() if i.homework]
+    
+
+    def add_balance(self, id:int, amount:int) -> int:
+        '''
+        Adds certain amount of money to a player's account.
+
+        If succeeded, returns the current amount of money in
+        the player's account.
+        '''
+        if id not in self.users:
+            return
+        
+        user = self.users[id]
+        user.balance += amount
+        self.users[id] = user
+        
+        self.commit_db()
+
+
+    def collect_daily(self, id:int) -> int:
+        '''
+        Collects a daily reward.
+
+        Returns the collected amount. If can't collect daily
+        reward or user not found, returns None.
+        '''
+        if id not in self.users:
+            self.users[id]
+            return
+        
+        if self.users[id].daily_until > time.time():
+            return
+        
+        amount = random.randint(*config.DAILY_REWARD_RANGE)
+        user = self.users[id]
+        user.balance += amount
+        user.daily_until = time.time()+config.DAILY_REWARD_TIMEOUT
+        self.users[id] = user
+
+        self.commit_db()
+        return amount

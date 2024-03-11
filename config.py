@@ -30,4 +30,10 @@ HELP_TEXT = '''\
 <b>/homework</b> - посмотреть или изменить записанное ДЗ
 <b>/subject</b> - посмотреть информацию о предмете
 <b>/schedule</b> - посмотреть расписание уроков на любой день
+<b>/eco</b> - открыть меню экономики
 '''
+
+DEFAULT_BALANCE = 0 # default economy balance
+CURRENCY = '🍆' # currency symbol
+DAILY_REWARD_RANGE = [25,50] # range between which numbers the resulting daily reward will be
+DAILY_REWARD_TIMEOUT = 6*60*60 # daily reward timeout in seconds
