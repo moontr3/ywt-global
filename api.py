@@ -209,14 +209,20 @@ class Time:
 # user
 
 class User:
-    def __init__(self, user:AiogramUser):
+    def __init__(self, id:int, full_name:str, handle:str):
         '''
         A user entry in a database
         '''
-        self.id: int = user.id # telegram user id
-        self.name: str = user.username if user.username else user.full_name # user name to display
-        self.full_name: str = user.full_name # telegram account name and surname
-        self.handle: str = user.username # telegram username, can be none
+        self.id: int = id # telegram user id
+        self.name: str = handle if handle else full_name # user name to display
+        self.full_name: str = full_name # telegram account name and surname
+        self.handle: str = handle # telegram username, can be none
+
+    def to_dict(self) -> dict:
+        return {
+            "full_name": self.full_name,
+            "handle": self.handle
+        }
         
     def update_name(self, user:AiogramUser):
         '''
@@ -499,7 +505,7 @@ class Manager:
         if user.id in self.users:
             return
         
-        self.users[user.id] = User(user)
+        self.users[user.id] = User(user.id, user.full_name, user.username)
         self.commit_db()
 
 

@@ -161,8 +161,13 @@ def add_overlay(attachment:api.Attachment) -> str:
         font, 'rd'
     )
     # author
-    # todo put a user here
-    string = f'От {utils.shorten_string(str(attachment.written_by), 25)}'\
+    user = mg.get_user(attachment.written_by)
+    if user:
+        user = utils.shorten_string(user.full_name, 25)
+    else:
+        user = f'ID: {attachment.written_by}'
+
+    string = f'От {user}'\
         f' в {utils.shorten_date(written_at)}'
     draw.text(
         (image.size[0]-10, image.size[1]-30),
@@ -489,9 +494,7 @@ async def inline_editor_lesson(call: types.CallbackQuery):
         out += '<i>Ничего не записано</i>'
 
     for i in hw:
-        written_at = datetime.datetime.fromtimestamp(i.written_at)
-        photo_icon = '🖼' if i.attachment != None else ''
-        out += f'•  {photo_icon} {i.text} <i>({utils.shorten_date(written_at)})</i>\n'
+        out += utils.hw_to_string(i, user=mg.get_user(i.written_by).name)+'\n'
     
     # creating keyboard
     kb = InlineKeyboardBuilder()
