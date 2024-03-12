@@ -281,6 +281,7 @@ async def cmd_summary(msg: types.Message):
     log(f'{msg.from_user.full_name} ({msg.from_user.id}) requested summary')
     weekday, weekday_index = mg.get_summary()
     weekday: api.Day
+    weekday_index: int
     cur_time = api.Time(weekday, weekday_index)
 
     if cur_time.is_school:
@@ -359,7 +360,7 @@ async def cmd_subject(msg: types.Message):
 
     # creating keyboard
     kb = InlineKeyboardBuilder()
-    index = 0
+    index = 3
     for i in mg.lessons:
         i = mg.lessons[i]
         btn = types.InlineKeyboardButton(
@@ -522,7 +523,7 @@ async def inline_daily(call: types.CallbackQuery):
                          f'{utils.shorten_time(user.daily_until-time.time())}!', True)
         return
     
-    out = f'🎁 Вы получили <b>{reward}{config.CURRENCY}</b>!\n\n'\
+    out = f'🎁 <b>{user.name}</b>, вы получили <b>{reward}{config.CURRENCY}</b>!\n\n'\
         f'Приходите через <b>{utils.shorten_time(config.DAILY_REWARD_TIMEOUT)}</b> за новой наградой!'
 
     # creating keyboard

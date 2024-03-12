@@ -37,3 +37,4 @@ DEFAULT_BALANCE = 0 # default economy balance
 CURRENCY = '🍆' # currency symbol
 DAILY_REWARD_RANGE = [25,50] # range between which numbers the resulting daily reward will be
 DAILY_REWARD_TIMEOUT = 6*60*60 # daily reward timeout in seconds
+MAX_SLOTS_AMOUNT = 5 # default amount of slots

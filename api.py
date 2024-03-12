@@ -163,7 +163,7 @@ class Day:
 # current time data
 
 class Time:
-    def __init__(self, day:Day, weekday_index:int=True):
+    def __init__(self, day:Day, weekday_index:int):
         '''
         Contains current time info, like is the school going right now,
         the time until the next event, etc.
@@ -207,51 +207,69 @@ class Time:
                 self.is_school = False
 
 
-# user
+# user data
+                
+class Slot:
+    def __init__(
+        self, id:str, toilet_data:Dict
+    ):
+        '''
+        A slot in which you put your toilets to flush
+        '''
+
+                
 
 class User:
     def __init__(
         self, id:int, full_name:str, handle:str,
         balance:int=config.DEFAULT_BALANCE,
-        daily_until:int=0
+        daily_until:int=0,
+        max_slots:int=config.MAX_SLOTS_AMOUNT,
+        slots:List[Dict]=[]
     ):
         '''
         A user entry in a database
         '''
         self.id: int = int(id) # telegram user id
-        self.name: str = handle if handle else full_name # user name to display
         self.full_name: str = full_name # telegram account name and surname
         self.handle: str = handle # telegram username, can be none
+        self.name: str = handle if handle else full_name # user name to display
+        self.name = self.name.replace('<','').replace('>','') # no shit !! .. 
 
         self.balance: int = balance # current user's economy balance
         self.daily_until: int = daily_until # timestamp after which the daily reward may be collected
+        self.max_slots: int = max_slots # maximum amount of slots
+        self.slots: List[Slot] = [Slot(id=i, *slots[i]) for i in slots]
 
     def to_dict(self) -> dict:
         return {
             "full_name": self.full_name,
             "handle": self.handle,
             "balance": self.balance,
-            "daily_until": self.daily_until
+            "daily_until": self.daily_until,
+            "max_slots": self.max_slots,
+            "slots": [i.to_dict() for i in self.slots]
         }
         
-    def update_name(self, user:AiogramUser):
+    def update_name(self, full_name:str, handle:str):
         '''
         Updates the name and the handle of the user.
         '''
         changed = False
 
-        if self.full_name != user.full_name:
-            log(f'User {self.id} changed full name from {self.full_name} to {user.full_name}')
-            self.full_name = user.full_name
+        if self.full_name != full_name:
+            log(f'User {self.id} changed full name from {self.full_name} to {full_name}')
+            self.full_name = full_name
             changed = True
 
-        if self.handle != user.username:
-            log(f'User {self.id} changed handle from {self.handle} to {user.username}')
-            self.handle = user.username
+        if self.handle != handle:
+            log(f'User {self.id} changed handle from {self.handle} to {handle}')
+            self.handle = handle
             changed = True
 
         if changed:
-            self.name = user.username if user.username else user.full_name
+            self.name: str = handle if handle else full_name # user name to display
+            self.name = self.name.replace('<','').replace('>','') # no shit !! .. 
         
 
 
@@ -423,6 +441,9 @@ class Manager:
         if user.id not in self.users:
             self.new_user(user)
 
+        # user name
+        self.users[user.id].update_name(user.full_name, user.username)
+
         # checking permissions
         if user.id in config.ADMINS: return None # все равны но админы ровнее
 
@@ -537,7 +558,9 @@ class Manager:
         assert weekday_index in self.available_days, "No such weekday available"
 
         # todo substitutions
-        return self.schedule[weekday_index]
+        day = self.schedule[weekday_index]
+        day.weekday = datetime.datetime.now().weekday()
+        return day
         
 
     def next_available_weekday(self, start_weekday:int) -> int:
@@ -568,17 +591,17 @@ class Manager:
         if weekday not in self.available_days:
             # just showing the next available day
             weekday = self.next_available_weekday(weekday)
-            return self.schedule[weekday], weekday
+            return self.get_schedule(weekday), weekday
         
         else:
-            day: Day = self.schedule[weekday]
+            day: Day = self.get_schedule(weekday)
 
             if cur_time.hour > day.lesson_end_time.hour or\
             (cur_time.hour == day.lesson_end_time.hour\
             and cur_time.minute >= day.lesson_end_time.minute): 
                 # if the current day is available and the school time had already passed
                 weekday = self.next_available_weekday((weekday+1)%7)
-                return self.schedule[weekday], weekday
+                return self.get_schedule(weekday), weekday
             else:
                 # if the school is still in progress
                 return day, weekday
