@@ -37,6 +37,19 @@ mg = api.Manager(
 # functions
 # ---------------------------
 
+def get_profile_text(user:api.User) -> str:
+    '''
+    Creates a stats message for a user
+    '''
+    out = f'👤 <b>{user.name}</b>\n'
+    out += f'🏢 <code>[{user.company_handle}]</code> {user.company_name}\n'
+    out += f'<code>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _</code>\n'
+    out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
+    out += f'💵 Баланс: <b>{user.balance}{config.CURRENCY}</b>\n'
+
+    return out
+
+
 def get_stats_text(user:api.User) -> str:
     '''
     Creates a eco stats message
@@ -45,7 +58,7 @@ def get_stats_text(user:api.User) -> str:
     out += f'<code>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _</code>\n'
     out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
     
-    out += f'💳 Ваш баланс: <b>{user.balance}{config.CURRENCY}</b>\n'
+    out += f'💵 Ваш баланс: <b>{user.balance}{config.CURRENCY}</b>\n'
     if time.time() >= user.daily_until:
         out += f'🎁 Ежедневная награда уже доступна!'
     else:
@@ -97,9 +110,12 @@ def get_summary_text(day:api.Day, timedata:api.Time) -> str:
             f'{i.end_time.hour}:{i.end_time.minute:0>2}  •  '\
             f'<b>{mg.lessons[i.name].name}</b> '\
             f'<i>({", ".join(l.room for l in mg.lessons[i.name].teachers)})</i>\n'
-        
+
         hw = mg.get_homework(i.name)
         for x in hw:
+            # not showing today's homework
+            if datetime.date.fromtimestamp(x.written_at) == datetime.date.today():
+                continue
             out += '<code>  </code>'+utils.hw_to_string(x, False)+'\n'
 
     return out
@@ -309,6 +325,9 @@ async def cmd_summary(msg: types.Message):
 
     for i in mg.attachments.values():
         if i.lesson not in weekday.lessons: continue
+        # not showing today's homework
+        if datetime.date.fromtimestamp(i.written_at) == datetime.date.today():
+            continue
         kb.row(types.InlineKeyboardButton(
             text=f"📷 {i.comment}",
             callback_data=f'image_{i.id}'
@@ -445,13 +464,39 @@ async def cmd_reload(msg: types.Message):
 # economy command
 # ---------------------------
 
+@dp.message(Command('search'))
+async def cmd_find_user(msg: types.Message):
+    '''
+    Searches for user by company handle
+    '''
+    # preparing
+    check = mg.check(msg.from_user, True)
+    if check:
+        await msg.reply(f"❌ {check}")
+        return
+
+    log(f'{msg.from_user.full_name} ({msg.from_user.id}) finding user')
+    mg.set_state(msg.from_user.id, 'find_user')
+
+    # composing message
+    out = '🔍 Введите в чат того, кого вы хотите найти'
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text="❌ Отмена", callback_data=f'reset_state'))
+
+    # sending
+    await msg.reply(out, reply_markup=kb.as_markup())
+
+
+
 @dp.message(Command('eco'))
 async def cmd_eco(msg: types.Message):
     '''
     Shows the basic user stats
     '''
     # preparing
-    check = mg.check(msg.from_user)
+    check = mg.check(msg.from_user, True)
     if check:
         await msg.reply(f"❌ {check}")
         return
@@ -464,7 +509,8 @@ async def cmd_eco(msg: types.Message):
 
     # creating keyboard
     kb = InlineKeyboardBuilder()
-    kb.row(types.InlineKeyboardButton(text="🚽 Плот", callback_data=f'plot'))
+    kb.add(types.InlineKeyboardButton(text="🚽 Плот", callback_data=f'plot'))
+    kb.add(types.InlineKeyboardButton(text="📊 Компания", callback_data=f'company'))
     kb.row(types.InlineKeyboardButton(text="🎁 Ежедневная награда", callback_data=f'daily'))
 
     # sending
@@ -492,7 +538,90 @@ async def inline_eco(call: types.CallbackQuery):
     # creating keyboard
     kb = InlineKeyboardBuilder()
     kb.row(types.InlineKeyboardButton(text="🚽 Плот", callback_data=f'plot'))
+    kb.add(types.InlineKeyboardButton(text="📊 Компания", callback_data=f'company'))
     kb.row(types.InlineKeyboardButton(text="🎁 Ежедневная награда", callback_data=f'daily'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
+
+
+@dp.callback_query(F.data == 'company')
+async def inline_company(call: types.CallbackQuery):
+    '''
+    Displays company info
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) requested company info')
+    user = mg.get_user(call.from_user.id)
+
+    # composing message
+    out = f'🏢 <b>{user.name}</b>, вы в офисе своей компании\n'\
+        f'<b><code>[{user.company_handle}]</code> {user.company_name}</b>\n'
+    out += f'<code>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _</code>\n'
+    out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text="⬅ Назад", callback_data=f'eco'))
+    kb.row(types.InlineKeyboardButton(text="✏ Сменить имя", callback_data=f'edit_name'))
+    kb.add(types.InlineKeyboardButton(text="✏ Сменить тэг", callback_data=f'edit_handle'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
+
+@dp.callback_query(F.data == 'plot')
+async def inline_company(call: types.CallbackQuery):
+    '''
+    Displays company info
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) requested plot info')
+    user = mg.get_user(call.from_user.id)
+
+    # composing message
+    out = f'🚽 <b>{user.name}</b>, вы в своем подвале туалетов\n'\
+        f'🧻 <b>У вас {user.max_slots} слотов</b>\n'
+    out += f'<code>_ _ _ _ _ _ _ _ _ _ _ _ _ _ _</code>\n'
+    out += f'<code>¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯ ¯</code>\n'
+    for index, i in enumerate(user.slots):
+        out += f'<code>{index+1}</code> '
+        if i.toilet_data == None:
+            out += '<i>Пустой слот</i>'
+        
+        out += '\n'
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    rownum = 0
+    for index, i in enumerate(user.slots):
+        if i.toilet_data == None:
+            symbol = '➖'
+        else:
+            symbol = '❓'
+        button = types.InlineKeyboardButton(text=f'{index+1} {symbol}', callback_data=f'slot_{index}')
+            
+        rownum += 1
+        if rownum > 5:
+            kb.row(button)
+        else:
+            kb.add(button)
+    kb.row(types.InlineKeyboardButton(text="⬅ Назад", callback_data=f'eco'))
 
     # sending
     await call.message.edit_text(out, reply_markup=kb.as_markup())
@@ -532,6 +661,103 @@ async def inline_daily(call: types.CallbackQuery):
 
     # sending
     await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
+
+
+@dp.callback_query(F.data == 'edit_handle')
+async def inline_edit_handle(call: types.CallbackQuery):
+    '''
+    Edits company handle
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) editing company handle')
+    user = mg.get_user(call.from_user.id)
+    
+    # checking availability
+    if not user.handle_change_free and user.balance < config.HANDLE_CHANGE_COST:
+        await call.answer(f'❌ Вам необходимо {config.HANDLE_CHANGE_COST}{config.CURRENCY}'\
+            f' для изменения тэга!\n\nВаш баланс: {user.balance}{config.CURRENCY}', True)
+        return
+    
+    mg.set_state(user.id, 'edit_handle')
+
+    # composing message
+    out = f'<b>{user.name}</b>, введите в чат новый тэг вашей компании.\n\n'\
+        f'Текущий тэг: <b><code>{user.company_handle}</code></b>\n' + (
+            f'<b>Цена изменения: {config.HANDLE_CHANGE_COST}{config.CURRENCY}</b>\n\n'\
+            if not user.handle_change_free else\
+            f'<b>Это изменение будет бесплатным. Потом - {config.HANDLE_CHANGE_COST}{config.CURRENCY}</b>\n\n'
+        ) + f'<i>{config.HANDLE_MUST_CONTAIN_TEXT}</i>\n'\
+        f'<i>Максимальное кол-во символов: <b>{config.HANDLE_MAX_LENGTH}</b></i>'
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text="❌ Отмена", callback_data=f'company'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
+@dp.callback_query(F.data == 'edit_name')
+async def inline_edit_name(call: types.CallbackQuery):
+    '''
+    Edits company name
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    log(f'{call.from_user.full_name} ({call.from_user.id}) editing company name')
+    user = mg.get_user(call.from_user.id)
+    mg.set_state(user.id, 'edit_name')
+
+    # composing message
+    out = f'<b>{user.name}</b>, введите в чат новое название вашей компании.\n\n'\
+        f'Текущее имя: <b>{user.company_name}</b>\n\n'\
+        f'<i>Максимальное кол-во символов: <b>{config.COMP_NAME_MAX_LENGTH}</b></i>'
+
+    # creating keyboard
+    kb = InlineKeyboardBuilder()
+    kb.add(types.InlineKeyboardButton(text="❌ Отмена", callback_data=f'company'))
+
+    # sending
+    await call.message.edit_text(out, reply_markup=kb.as_markup())
+    await call.answer()
+
+
+
+@dp.callback_query(F.data.startswith('profile_'))
+async def inline_profile(call: types.CallbackQuery):
+    '''
+    Displays profile of a user
+    '''
+    # preparing
+    check = mg.check(call.from_user, True)
+    if check:
+        await call.answer(f"❌ {check}")
+        return
+
+    user = mg.get_user(int(call.data.removeprefix('profile_')))
+    log(f'{call.from_user.full_name} ({call.from_user.id}) requested profile info for {user.id}')
+
+    # checking user
+    if user == None:
+        await call.answer('❌ Пользователь не найден', True)
+        return
+
+    # sending
+    out = get_profile_text(user)
+    await call.message.answer(out)
     await call.answer()
 
 
@@ -951,6 +1177,18 @@ async def delete_callback(call: types.CallbackQuery):
     await call.answer()
 
 
+@dp.callback_query(F.data == 'reset_state')
+async def reset_state_callback(call: types.CallbackQuery):
+    '''
+    Reset user state
+    '''
+    if mg.get_state(call.from_user.id) == None:
+        await call.answer('❌ Текущих действий нет.', True)
+    else:
+        mg.reset_state(call.from_user.id)
+        await call.answer('💥 Действие успешно отменено!', True)
+
+
 
 
 
@@ -989,6 +1227,7 @@ async def state_handler(msg: types.Message):
         if msg.photo and msg.caption == None:
             await msg.reply("<b>❌ Операция отменена</b>\n\nНеобходимо написать"\
                             " текст сообщения вдобавок к изображению. Попробуйте ещё раз.")
+            mg.set_state(msg.from_user.id, state)
             return
         
         # adding hw
@@ -1005,6 +1244,7 @@ async def state_handler(msg: types.Message):
             if attachment == None:
                 out = '<b>❌ Операция отменена</b>\n\nНе удалось сохранить изображение. Попробуйте ещё раз.'
                 await loading_msg.edit_text(out)
+                mg.set_state(msg.from_user.id, state)
                 return
             
             await loading_msg.delete()
@@ -1018,9 +1258,148 @@ async def state_handler(msg: types.Message):
         kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'hweditor_{lesson.id}'))
         kb.add(types.InlineKeyboardButton(text='✏ Записать ещё', callback_data=f'hwadd_{lesson.id}'))
 
-
         out = f'📚 Вы успешно записали ДЗ <b>{text}</b> на урок <b>{lesson.name}</b>'
         await msg.reply(out, reply_markup=kb.as_markup())
+
+
+    # handle editing
+    elif state == 'edit_handle':
+        # check
+        check = mg.check(msg.from_user, True)
+        if check:
+            await msg.reply(f"❌ {check}")
+            return
+        
+        # checking if user already has this handle
+        handle = msg.text.upper()
+        user = mg.get_user(msg.from_user.id)
+        if handle == user.company_handle:
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'У вас уже установлен этот тэг. Попробуйте ещё раз.')
+            mg.set_state(msg.from_user.id, state)
+            return
+        
+        # checking balance
+        if not user.handle_change_free and user.balance < config.HANDLE_CHANGE_COST:
+            await msg.reply(f'<b>❌ Вам необходимо {config.HANDLE_CHANGE_COST}{config.CURRENCY}'\
+                f'для изменения тэга!</b>\n\nВаш баланс: <b>{user.balance}{config.CURRENCY}</b>')
+            return
+        
+        # checking if handle's good
+        if not utils.check_handle(handle):
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'Данный тэг не соответствует требованиям. Попробуйте ещё раз.')
+            mg.set_state(msg.from_user.id, state)
+            return
+        
+        # checking availability
+        if not mg.handle_available(handle):
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'Данный тэг уже занят. Попробуйте ещё раз.')
+            mg.set_state(msg.from_user.id, state)
+            return
+        
+        # changing handle
+        try:
+            mg.change_handle(user.id, handle)
+        except Exception as e:
+            log(str(e), level=ERROR)
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'Не удалось изменить тэг.')
+            return
+        
+        log(f'{msg.from_user.full_name} ({msg.from_user.id}) changed company handle to {handle}')
+
+        # keyboard
+        kb = InlineKeyboardBuilder()
+        kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'company'))
+
+        out = f'🏷 Вы успешно изменили свой тэг на <code>{handle}</code>!'
+        await msg.reply(out, reply_markup=kb.as_markup())
+
+
+    # name editing
+    elif state == 'edit_name':
+        # check
+        check = mg.check(msg.from_user, True)
+        if check:
+            await msg.reply(f"❌ {check}")
+            return
+        
+        # checking if user already has this name
+        name = utils.check_text(msg.text)
+        user = mg.get_user(msg.from_user.id)
+        if name == user.company_name:
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'У вас уже такое имя. Попробуйте ещё раз.')
+            mg.set_state(msg.from_user.id, state)
+            return
+        
+        # checking if name's good
+        if len(name) > config.COMP_NAME_MAX_LENGTH:
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'Данное имя слишком длинное. Попробуйте ещё раз.')
+            mg.set_state(msg.from_user.id, state)
+            return
+        
+        # changing name
+        try:
+            mg.change_comp_name(user.id, name)
+        except Exception as e:
+            log(str(e), level=ERROR)
+            await msg.reply(f'<b>❌ Операция отменена</b>\n\n'\
+                f'Не удалось изменить имя компании.')
+            return
+        
+        log(f'{msg.from_user.full_name} ({msg.from_user.id}) changed company name to {name}')
+
+        # keyboard
+        kb = InlineKeyboardBuilder()
+        kb.add(types.InlineKeyboardButton(text='⬅ Назад', callback_data=f'company'))
+
+        out = f'🏷 Вы успешно изменили имя компании на <b>{name}</b>!'
+        await msg.reply(out, reply_markup=kb.as_markup())
+
+
+    # finding user
+    elif state == 'find_user':
+        # check
+        log(f'{msg.from_user.full_name} ({msg.from_user.id}) searching for user {msg.text}')
+        check = mg.check(msg.from_user, True)
+        if check:
+            await msg.reply(f"❌ {check}")
+            return
+        
+        # finding user
+        users: List[api.User] = mg.find_user(msg.text)
+
+        if users == []:
+            await msg.reply('❌ Пользователей не найдено. Попробуйте ещё раз.')
+            mg.set_state(msg.from_user.id, state)
+            return
+
+        # getting user profile
+        if len(users) == 1:
+            user = users[0]
+            out = get_profile_text(user)
+            await msg.reply(out)
+            return
+        
+        # returning a list of profiles
+        else:
+            out = f'🔍 Найдено <b>{len(users)}</b> совпадений\n\n'\
+                '<i>Нажмите на нужное для просмотра профиля</i>'
+            kb = InlineKeyboardBuilder()
+
+            for user in users:
+                kb.row(types.InlineKeyboardButton(
+                    text=f'[{user.company_handle}] {user.company_name}',
+                    callback_data=f'profile_{user.id}'
+                ))
+
+            await msg.reply(out, reply_markup=kb.as_markup())
+
+
 
 # starting bot
 

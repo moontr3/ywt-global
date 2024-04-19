@@ -31,10 +31,19 @@ HELP_TEXT = '''\
 <b>/subject</b> - посмотреть информацию о предмете
 <b>/schedule</b> - посмотреть расписание уроков на любой день
 <b>/eco</b> - открыть меню экономики
-'''
+<b>/search</b> - найти пользователя экономики
+''' # text displayes in /help and /start commans
 
 DEFAULT_BALANCE = 0 # default economy balance
 CURRENCY = '🍆' # currency symbol
 DAILY_REWARD_RANGE = [25,50] # range between which numbers the resulting daily reward will be
-DAILY_REWARD_TIMEOUT = 6*60*60 # daily reward timeout in seconds
+DAILY_REWARD_TIMEOUT = 6*60*60 # daily reward timeout in seconds (default is 6hr)
 MAX_SLOTS_AMOUNT = 5 # default amount of slots
+
+HANDLE_MUST_CONTAIN_TEXT = 'Тэг может содержать только заглавные английские буквы, цифры и знак подчёркивания.'
+    # text describing what symbols the handle must contain
+HANDLE_ALLOWED_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_'.upper() # symbols that are allowed in the company handle
+HANDLE_MAX_LENGTH = 4 # maximum length of a handle
+HANDLE_CHANGE_COST = 500 # how much it costs to change company handle
+
+COMP_NAME_MAX_LENGTH = 50

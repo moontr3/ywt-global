@@ -4,9 +4,39 @@ import datetime
 import time
 import random
 import api
+import config
 
 
 # functions
+
+def check_handle(text:str) -> bool:
+    '''
+    Returns whether the handle is good to use.
+    '''
+    for i in text:
+        if i not in config.HANDLE_ALLOWED_LETTERS:
+            return False
+    
+    if len(text) > config.HANDLE_MAX_LENGTH:
+        return False
+
+    return True
+
+def check_text(text:str) -> str:
+    '''
+    Removes anything that can mess with the markdown.
+    '''
+    return text.replace('<','').replace('>','')
+
+def to_handle(text:str, max_len:int=config.HANDLE_MAX_LENGTH) -> str:
+    '''
+    Converts a nickname to a handle name
+    '''
+    text = text.upper()[:max_len]
+    text = "".join([i for i in text if i in config.HANDLE_ALLOWED_LETTERS])
+    if text == "":
+        return "".join(random.choices(config.HANDLE_ALLOWED_LETTERS, k=max_len))
+    return text
 
 def hw_to_string(hw:api.HomeworkEntry, date:bool=True, user:str=None) -> str:
     '''

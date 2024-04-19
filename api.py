@@ -209,14 +209,38 @@ class Time:
 
 # user data
                 
+class SlotToilet:
+    def __init__(self, id:str, working_until:int, work_start:int):
+        '''
+        Represents a working toilet.
+        '''
+        self.id: str = id # toilet ID
+        self.working_until: int = working_until # timestamp when the toilet should stop working
+        self.work_start: int = work_start # timestamp of when the toilet started working
+
+    def to_dict(self) -> dict:
+        return {
+            "working_until": self.working_until,
+            "work_start": self.work_start
+        }
+
+                
 class Slot:
     def __init__(
-        self, id:str, toilet_data:Dict
+        self, toilet_data:dict=None,
+        stamina_restored_at:int=0
     ):
         '''
         A slot in which you put your toilets to flush
         '''
+        self.toilet_data: SlotToilet = SlotToilet(toilet_data) if toilet_data else None
+        self.stamina_restored_at: int = stamina_restored_at
 
+    def to_dict(self) -> dict:
+        return {
+            "toilet_data": self.toilet_data.to_dict() if self.toilet_data else None,
+            "stamina_restored_at": self.stamina_restored_at
+        }
                 
 
 class User:
@@ -225,7 +249,10 @@ class User:
         balance:int=config.DEFAULT_BALANCE,
         daily_until:int=0,
         max_slots:int=config.MAX_SLOTS_AMOUNT,
-        slots:List[Dict]=[]
+        slots:List[Dict]=[],
+        company_name:str=None,
+        company_handle:str=None,
+        handle_change_free:bool=True
     ):
         '''
         A user entry in a database
@@ -233,13 +260,16 @@ class User:
         self.id: int = int(id) # telegram user id
         self.full_name: str = full_name # telegram account name and surname
         self.handle: str = handle # telegram username, can be none
-        self.name: str = handle if handle else full_name # user name to display
-        self.name = self.name.replace('<','').replace('>','') # no shit !! .. 
+        self.name: str = utils.check_text(handle if handle else full_name) # user name to display
 
+        self.company_name: str = self.name if not company_name else company_name # the name of the company
+        self.company_handle: str =\
+            utils.to_handle(self.full_name) if not company_handle else company_handle # the handle of the company
+        self.handle_change_free: bool = handle_change_free
         self.balance: int = balance # current user's economy balance
         self.daily_until: int = daily_until # timestamp after which the daily reward may be collected
         self.max_slots: int = max_slots # maximum amount of slots
-        self.slots: List[Slot] = [Slot(id=i, *slots[i]) for i in slots]
+        self.slots: List[Slot] = [Slot(**i) for i in slots]
 
     def to_dict(self) -> dict:
         return {
@@ -248,10 +278,13 @@ class User:
             "balance": self.balance,
             "daily_until": self.daily_until,
             "max_slots": self.max_slots,
-            "slots": [i.to_dict() for i in self.slots]
+            "slots": [i.to_dict() for i in self.slots],
+            "company_name": self.company_name,
+            "company_handle": self.company_handle,
+            "handle_change_free": self.handle_change_free
         }
         
-    def update_name(self, full_name:str, handle:str):
+    def update_name(self, full_name:str, handle:str) -> bool:
         '''
         Updates the name and the handle of the user.
         '''
@@ -268,8 +301,9 @@ class User:
             changed = True
 
         if changed:
-            self.name: str = handle if handle else full_name # user name to display
-            self.name = self.name.replace('<','').replace('>','') # no shit !! .. 
+            self.name: str = utils.check_text(handle if handle else full_name) # user name to display
+
+        return changed
         
 
 
@@ -441,8 +475,17 @@ class Manager:
         if user.id not in self.users:
             self.new_user(user)
 
-        # user name
-        self.users[user.id].update_name(user.full_name, user.username)
+        changed = self.users[user.id].update_name(user.full_name, user.username)
+
+        # economy slots
+        while len(self.users[user.id].slots) < self.users[user.id].max_slots:
+            self.users[user.id].slots.append(Slot())
+            changed = True
+
+        # commiting if needed
+        if changed:
+            self.commit_db()
+        
 
         # checking permissions
         if user.id in config.ADMINS: return None # все равны но админы ровнее
@@ -463,7 +506,7 @@ class Manager:
             # write blacklist
             if config.USE_WRITE_WHITELIST and user.id not in self.write_blacklist:
                 return 'Нет прав для записи - Пользователь не в белом списке'
-        
+            
 
     def add_to_blacklist(self, id:int) -> bool:
         '''
@@ -635,7 +678,7 @@ class Manager:
         '''
         id = utils.rand_id()
         self.homework[id] = HomeworkEntry(
-            id, lesson, text, attachment,
+            id, lesson, utils.check_text(text), attachment,
             time.time(), written_by
         )
         self.commit_db()
@@ -724,6 +767,35 @@ class Manager:
         return [i for i in self.lessons.values() if i.homework]
     
 
+    def handle_available(self, handle:str) -> bool:
+        '''
+        Returns whether the handle is not occupied on any user
+        and can be set on anyone.
+        '''
+        for i in self.users.values():
+            if i.company_handle == handle:
+                return False
+            
+        return True
+    
+
+    def find_user(self, string:str) -> List[User]:
+        '''
+        Finds users in the database by name, handle, company
+        handle or company name and returns a list of successful
+        matches.
+        '''
+        out = []
+        for user in self.users.values():
+            if user.handle.lower().startswith(string.lstrip('@').lower()) or\
+                user.company_handle == string.upper() or\
+                user.full_name.lower().startswith(string.lower()) or\
+                user.company_name.lower().startswith(string.lower()):
+                    out.append(user)
+            
+        return out
+    
+
     def add_balance(self, id:int, amount:int) -> int:
         '''
         Adds certain amount of money to a player's account.
@@ -763,3 +835,34 @@ class Manager:
 
         self.commit_db()
         return amount
+    
+    
+    def change_handle(self, id:int, handle:str, charge:bool=True):
+        '''
+        Changes the user's company handle to the provided one.
+        '''
+        user = self.users[id]
+        user.company_handle = handle
+        # taking money
+        if charge:
+            if not user.handle_change_free:
+                assert user.balance >= config.HANDLE_CHANGE_COST,\
+                    'Insufficient funds'
+                user.balance -= config.HANDLE_CHANGE_COST
+            else:
+                user.handle_change_free = False
+    
+        # updating db
+        self.users[id] = user
+        self.commit_db()
+    
+    
+    def change_comp_name(self, id:int, name:str):
+        '''
+        Changes the user's company name to the provided one.
+        '''
+        user = self.users[id]
+        user.company_name = name
+        self.users[id] = user
+
+        self.commit_db()
