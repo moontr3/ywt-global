@@ -328,8 +328,10 @@ async def cmd_summary(msg: types.Message):
         # not showing today's homework
         if datetime.date.fromtimestamp(i.written_at) == datetime.date.today():
             continue
+        # adding homework
+        lesson = mg.lessons[i.lesson]
         kb.row(types.InlineKeyboardButton(
-            text=f"📷 {i.comment}",
+            text=f"📷 {lesson.short_name}: {i.comment}",
             callback_data=f'image_{i.id}'
         ))
 
