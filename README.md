@@ -6,11 +6,11 @@ A project that I made for myself but I'll be happy if you use it too.
 
 ## Features / todo list
 
-- [+] Basic schedule and lesson viewing
-- [+] Managing home tasks
+- [x] Basic schedule and lesson viewing
+- [x] Managing home tasks
 - [ ] Managing substitutions
 - [ ] Notifications about upcoming lessons
-- [+] User blacklists and whitelists
+- [x] User blacklists and whitelists
 - [ ] Devtools
 - [ ] Basic slavery-ish economy system
 - [ ] Custom roleplay commands (Cuz my class be insane 🔥)
