@@ -252,7 +252,8 @@ class User:
         slots:List[Dict]=[],
         company_name:str=None,
         company_handle:str=None,
-        handle_change_free:bool=True
+        handle_change_free:bool=True,
+        **kwargs
     ):
         '''
         A user entry in a database
