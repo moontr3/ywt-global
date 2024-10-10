@@ -143,8 +143,10 @@ class Day:
 
         for i in self.schedule:
             if len(lessons)-1 == lesson_index:
-                self.lesson_end_timestamp: int = int(event_time)
-                self.lesson_end_time = datetime.datetime.fromtimestamp(event_time)
+                self.lesson_end_timestamp: int = int(event_time+i['length']*60)
+                self.lesson_end_time = datetime.datetime.fromtimestamp(
+                    event_time+i['length']*60
+                )
 
             if not i['break'] and lesson_index < len(lessons):
                 # pasting in lesson info
@@ -155,7 +157,7 @@ class Day:
 
             self.events.append(Event(event_time, i))
             event_time += i['length']*60 # because time in schedule data is in minutes
-
+            
         self.end_timestamp: int = event_time
         self.end_time = datetime.datetime.fromtimestamp(self.end_timestamp)
 
