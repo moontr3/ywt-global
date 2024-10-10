@@ -3,7 +3,7 @@
 
 from typing import *
 
-from aiogram import types, Dispatcher, Bot, F
+from aiogram import types, Dispatcher, Bot, F, client
 from aiogram.filters.command import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import asyncio
@@ -24,7 +24,11 @@ from PIL import Image, ImageDraw, ImageFont
 load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
 
-bot = Bot(TOKEN, parse_mode='html')
+bot = Bot(TOKEN,
+    default=client.default.DefaultBotProperties(
+        parse_mode='html'
+    )
+)
 dp = Dispatcher()
 
 mg = api.Manager(
@@ -113,9 +117,9 @@ def get_summary_text(day:api.Day, timedata:api.Time) -> str:
 
         hw = mg.get_homework(i.name)
         for x in hw:
-            # not showing today's homework
-            if datetime.date.fromtimestamp(x.written_at) == datetime.date.today():
-                continue
+            # not showing today's homework # FIXME
+            # if datetime.date.fromtimestamp(x.written_at) == datetime.date.today():
+            #     continue
             out += '<code>  </code>'+utils.hw_to_string(x, False)+'\n'
 
     return out
@@ -325,9 +329,9 @@ async def cmd_summary(msg: types.Message):
 
     for i in mg.attachments.values():
         if i.lesson not in weekday.lessons: continue
-        # not showing today's homework
-        if datetime.date.fromtimestamp(i.written_at) == datetime.date.today():
-            continue
+        # not showing today's homework # FIXME
+        # if datetime.date.fromtimestamp(i.written_at) == datetime.date.today():
+        #     continue
         # adding homework
         lesson = mg.lessons[i.lesson]
         kb.row(types.InlineKeyboardButton(
